@@ -1,0 +1,121 @@
+{
+  "name": "open-web-ui-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows desktop host for the Open WebUI server fork",
+  "author": "Lucas de Oliveira Neitzke",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build:ui": "vite build",
+    "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-electron-assets.cjs",
+    "build": "npm run build:ui && npm run build:electron",
+    "start": "npm run build && electron .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package:win": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-backend.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-git-resources.ps1 && electron-builder --win nsis",
+    "clean:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/clean-release.ps1",
+    "package:win:clean": "npm run clean:release && npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-backend.ps1 && electron-builder --win nsis",
+    "package:dev": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-backend.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-git-resources.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-unpacked.ps1 && electron-builder --win --dir && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-unpacked.ps1",
+    "package:msix": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-backend.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-git-resources.ps1 && electron-builder --win appx"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "pinia": "^2.3.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "electron": "^44.9.2",
+    "@types/node": "^22.13.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron-builder": "^26.15.3",
+    "postcss": "^8.5.3",
+    "@tailwindcss/postcss": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^5.0.5",
+    "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "com.openwebui.desktop",
+    "productName": "Open Web UI Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/node_modules/**"
+        ]
+      },
+      {
+        "from": "lib",
+        "to": "lib",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "backend/.git/HEAD",
+        "to": "backend/.git/HEAD"
+      },
+      {
+        "from": "backend/.git/config",
+        "to": "backend/.git/config"
+      },
+      {
+        "from": "backend/.git/packed-refs",
+        "to": "backend/.git/packed-refs"
+      },
+      {
+        "from": "backend/.git/shallow",
+        "to": "backend/.git/shallow"
+      },
+      {
+        "from": "backend/.git/refs/heads/main",
+        "to": "backend/.git/refs/heads/main"
+      },
+      {
+        "from": "backend/.git/objects/pack",
+        "to": "backend/.git/objects/pack",
+        "filter": [
+          "*.pack",
+          "*.idx"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "appx"
+      ],
+      "artifactName": "OpenWebUIDesktop-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "include": "build/installer.nsh"
+    },
+    "appx": {
+      "applicationId": "OpenWebUIDesktop",
+      "displayName": "Open Web UI Desktop",
+      "publisher": "CN=OpenWebUIDesktop",
+      "identityName": "OpenWebUIDesktop",
+      "publisherDisplayName": "Open Web UI Desktop",
+      "backgroundColor": "#0F0F11"
+    }
+  }
+}

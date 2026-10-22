@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+	<head>
+		<meta charset="utf-8" />
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'none'; style-src 'unsafe-inline'"
+		/>
+		<title>Open Web UI - barra de titulo</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 52px;
+				overflow: hidden;
+				background: #0f0f11;
+			}
+			body {
+				font-family: Inter, 'Segoe UI', Arial, sans-serif;
+				color: #f3f2f2;
+				font-size: 13px;
+				user-select: none;
+				cursor: default;
+			}
+			.titlebar {
+				height: 52px;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 0 0 0 22px;
+				border-bottom: 1px solid rgba(255, 255, 255, 0.075);
+				-webkit-app-region: drag;
+			}
+			.lockup {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				font-size: 13px;
+				font-weight: 650;
+				letter-spacing: -0.15px;
+			}
+			.lockup b {
+				font-weight: 450;
+				color: #aaa9ad;
+			}
+			.brand {
+				display: grid;
+				place-items: center;
+				width: 25px;
+				height: 25px;
+				border-radius: 9px;
+				background: linear-gradient(145deg, #ec6866, #bd3e4c);
+				color: #fff;
+				font-size: 14px;
+				font-weight: 750;
+			}
+			.pill {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				margin-left: 10px;
+				padding: 5px 9px;
+				border-radius: 20px;
+				background: #191f1c;
+				color: #b5c8bb;
+				font-size: 10px;
+				font-weight: 500;
+				letter-spacing: 0.1px;
+			}
+			.pill i {
+				width: 6px;
+				height: 6px;
+				border-radius: 50%;
+				background: #62c98e;
+				box-shadow: 0 0 7px #62c98e66;
+			}
+			.actions {
+				display: flex;
+				align-items: center;
+				height: 100%;
+				-webkit-app-region: no-drag;
+			}
+			.actions button {
+				appearance: none;
+				-webkit-appearance: none;
+				width: 45px;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				border: 0;
+				border-radius: 0;
+				background: transparent;
+				color: #aaa9ad;
+				font-family: inherit;
+				font-size: 17px;
+				line-height: 1;
+				cursor: pointer;
+				transition: background 0.15s;
+			}
+			.actions button:hover {
+				background: rgba(255, 255, 255, 0.07);
+			}
+			.actions button:focus-visible {
+				outline: 2px solid #d94f55;
+				outline-offset: -2px;
+			}
+			.actions .close {
+				font-size: 22px;
+			}
+			.actions .close:hover {
+				background: #c64349;
+				color: #fff;
+			}
+			@media (max-width: 720px) {
+				.titlebar {
+					padding-left: 12px;
+				}
+				.pill {
+					display: none;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<header class="titlebar">
+			<div class="lockup">
+				<span class="brand">W</span>
+				<span>Open Web UI <b>Servidor</b></span>
+				<span class="pill"><i></i>Servidor ativo</span>
+			</div>
+			<div class="actions">
+				<button type="button" data-action="minimize" aria-label="Minimizar" title="Minimizar">
+					&#x2014;
+				</button>
+				<button
+					type="button"
+					data-action="toggleMaximize"
+					aria-label="Maximizar"
+					title="Maximizar"
+				>
+					&#x25A1;
+				</button>
+				<button
+					type="button"
+					class="close"
+					data-action="close"
+					aria-label="Fechar"
+					title="Fechar"
+				>
+					&#x00D7;
+				</button>
+			</div>
+		</header>
+	</body>
+</html>

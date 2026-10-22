@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-electron/
+release/
+lib/python/
+lib/site-packages/
+*.log
+.DS_Store
+Thumbs.db
