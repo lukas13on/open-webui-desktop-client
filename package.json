@@ -20,19 +20,24 @@
     "package:msix": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-backend.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-git-resources.ps1 && electron-builder --win appx"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/free-brands-svg-icons": "^7.3.1",
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@fortawesome/vue-fontawesome": "^3.3.3",
     "@vitejs/plugin-vue": "^5.2.1",
+    "flag-icons": "^7.6.0",
     "pinia": "^2.3.1",
     "vue": "^3.5.13"
   },
   "devDependencies": {
-    "electron": "^44.9.2",
+    "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^22.13.4",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
+    "electron": "^44.9.2",
     "electron-builder": "^26.15.3",
     "postcss": "^8.5.3",
-    "@tailwindcss/postcss": "^4.1.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",

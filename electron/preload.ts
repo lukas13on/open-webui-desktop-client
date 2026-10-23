@@ -1,14 +1,24 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopConfig } from './config-store';
+import type { DesktopConfigPayload, PublicDesktopConfig } from './config-store';
+import type { EnvironmentSnapshot } from './environment-service';
+import type { EnvEntry } from './env-file';
 import type { PendingCommit } from './updater';
 
 type WindowState = { maximized: boolean; minimized: boolean };
 
 const desktop = {
-  getConfig: (): Promise<DesktopConfig> => ipcRenderer.invoke('config:get'),
-  saveConfig: (config: DesktopConfig): Promise<void> => ipcRenderer.invoke('config:save', config),
+  getConfig: (): Promise<DesktopConfigPayload> => ipcRenderer.invoke('config:get'),
+  saveConfig: (config: PublicDesktopConfig): Promise<void> => ipcRenderer.invoke('config:save', config),
   getBackendUrl: (): Promise<string> => ipcRenderer.invoke('backend:url'),
+  getBackendVersion: (): Promise<string> => ipcRenderer.invoke('backend:version'),
+  getLanguageInfo: (): Promise<{ language: string; label: string }> => ipcRenderer.invoke('app:language-info'),
+  setLanguage: (value: string): Promise<string> => ipcRenderer.invoke('config:language', value),
+  getEnvironment: (): Promise<EnvironmentSnapshot> => ipcRenderer.invoke('env:get'),
+  saveEnvironment: (entries: EnvEntry[]): Promise<EnvironmentSnapshot> => ipcRenderer.invoke('env:save', entries),
+  saveEnvironmentRaw: (raw: string): Promise<EnvironmentSnapshot> => ipcRenderer.invoke('env:save-raw', raw),
+  resetEnvironment: (): Promise<EnvironmentSnapshot> => ipcRenderer.invoke('env:reset'),
   setHideDesktopOnOpen: (value: boolean): Promise<boolean> => ipcRenderer.invoke('config:hide-desktop-on-open', value),
+  setLaunchAtLogin: (value: boolean): Promise<boolean> => ipcRenderer.invoke('config:launch-at-login', value),
   openWebUI: (): Promise<void> => ipcRenderer.invoke('backend:open-ui'),
   getWindowState: (): Promise<WindowState> => ipcRenderer.invoke('window:state'),
   minimize: (): Promise<WindowState> => ipcRenderer.invoke('window:minimize'),

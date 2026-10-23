@@ -6,7 +6,7 @@
 			http-equiv="Content-Security-Policy"
 			content="default-src 'none'; style-src 'unsafe-inline'"
 		/>
-		<title>Open Web UI - barra de titulo</title>
+		<title>Open Web UI - titlebar</title>
 		<style>
 			html,
 			body {
@@ -67,12 +67,11 @@
 				font-weight: 500;
 				letter-spacing: 0.1px;
 			}
-			.pill i {
-				width: 6px;
-				height: 6px;
-				border-radius: 50%;
-				background: #62c98e;
-				box-shadow: 0 0 7px #62c98e66;
+			.pill svg {
+				width: 7px;
+				height: 7px;
+				color: #62c98e;
+				filter: drop-shadow(0 0 3px rgba(98, 201, 142, 0.45));
 			}
 			.actions {
 				display: flex;
@@ -83,6 +82,8 @@
 			.actions button {
 				appearance: none;
 				-webkit-appearance: none;
+				display: grid;
+				place-items: center;
 				width: 45px;
 				height: 100%;
 				margin: 0;
@@ -91,25 +92,28 @@
 				border-radius: 0;
 				background: transparent;
 				color: #aaa9ad;
-				font-family: inherit;
-				font-size: 17px;
-				line-height: 1;
 				cursor: pointer;
-				transition: background 0.15s;
+				transition: background 0.15s, color 0.15s;
+			}
+			.actions button svg {
+				width: 13px;
+				height: 13px;
 			}
 			.actions button:hover {
 				background: rgba(255, 255, 255, 0.07);
+				color: #d6d5d7;
 			}
 			.actions button:focus-visible {
 				outline: 2px solid #d94f55;
 				outline-offset: -2px;
 			}
-			.actions .close {
-				font-size: 22px;
-			}
 			.actions .close:hover {
 				background: #c64349;
 				color: #fff;
+			}
+			.actions .close svg {
+				width: 12px;
+				height: 12px;
 			}
 			@media (max-width: 720px) {
 				.titlebar {
@@ -125,29 +129,29 @@
 		<header class="titlebar">
 			<div class="lockup">
 				<span class="brand">W</span>
-				<span>Open Web UI <b>Servidor</b></span>
-				<span class="pill"><i></i>Servidor ativo</span>
+				<span>Open Web UI <b id="titlebar-suffix">Servidor</b></span>
+				<span class="pill">
+					<svg viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+						<path fill="currentColor" d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512z" />
+					</svg>
+					<span id="titlebar-status">Servidor ativo</span>
+				</span>
 			</div>
 			<div class="actions">
 				<button type="button" data-action="minimize" aria-label="Minimizar" title="Minimizar">
-					&#x2014;
+					<svg viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+						<path fill="currentColor" d="M0 416c0-17.7 14.3-32 32-32l448 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32z" />
+					</svg>
 				</button>
-				<button
-					type="button"
-					data-action="toggleMaximize"
-					aria-label="Maximizar"
-					title="Maximizar"
-				>
-					&#x25A1;
+				<button type="button" data-action="toggleMaximize" aria-label="Maximizar" title="Maximizar">
+					<svg viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+						<path fill="currentColor" d="M64 64C28.7 64 0 92.7 0 128L0 384c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L64 64zm24 64l336 0c13.3 0 24 10.7 24 24s-10.7 24-24 24L88 176c-13.3 0-24-10.7-24-24s10.7-24 24-24z" />
+					</svg>
 				</button>
-				<button
-					type="button"
-					class="close"
-					data-action="close"
-					aria-label="Fechar"
-					title="Fechar"
-				>
-					&#x00D7;
+				<button type="button" class="close" data-action="close" aria-label="Fechar" title="Fechar">
+					<svg viewBox="0 0 384 512" aria-hidden="true" focusable="false">
+						<path fill="currentColor" d="M55.1 73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L147.2 256 9.9 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192.5 301.3 329.9 438.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.8 256 375.1 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192.5 210.7 55.1 73.4z" />
+					</svg>
 				</button>
 			</div>
 		</header>

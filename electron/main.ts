@@ -1,13 +1,15 @@
-﻿import { app, BrowserWindow, dialog, ipcMain, Menu, shell, Tray, WebContentsView } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, Tray, WebContentsView } from 'electron';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { BackendManager } from './backend-manager';
-import { ConfigStore, type DesktopConfig } from './config-store';
+import { ConfigStore, normalizeLanguagePreference, SUPPORTED_LANGUAGES, type DesktopConfigPayload, type Language, type PublicDesktopConfig } from './config-store';
+import { EnvironmentService } from './environment-service';
 import { ensureAdministrator } from './security';
 import { UpdateManager } from './updater';
-import { validateSecretEnvironment } from './secrets';
 import { createTrayIcon } from './tray-icon';
+import { LANGUAGE_LABELS, resolveLanguage, setLanguage, t } from './i18n';
 
 const AUTHOR = 'Lucas de Oliveira Neitzke';
 const WEBUI_TITLEBAR_HEIGHT = 52;
@@ -23,6 +25,7 @@ let hideHintShown = false;
 const backend = BackendManager.getInstance();
 const store = ConfigStore.getInstance();
 const updater = UpdateManager.getInstance();
+const environment = EnvironmentService.getInstance();
 
 function isTrustedUi(sender: Electron.WebContents): boolean {
   if (BrowserWindow.fromWebContents(sender) !== window) return false;
@@ -52,6 +55,7 @@ function createWindow(maximized = false): BrowserWindow {
   if (maximized) win.maximize();
   win.once('ready-to-show', () => win.show());
   win.webContents.on('did-finish-load', () => {
+    if (win.isDestroyed()) return;
     win.webContents.send('window:maximized', win.isMaximized());
   });
   win.on('maximize', () => {
@@ -123,8 +127,8 @@ function showTrayHint(): void {
   if (hideHintShown || !tray) return;
   hideHintShown = true;
   tray.displayBalloon({
-    title: 'Open Web UI Desktop continua em execuÃ§Ã£o',
-    content: 'Use o Ã­cone na bandeja do sistema para reabrir a janela ou sair do aplicativo.',
+    title: t('balloon.title'),
+    content: t('balloon.content'),
     iconType: 'info'
   });
 }
@@ -206,7 +210,6 @@ function createWebUiShell(): WebUiShell {
   bar.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   bar.webContents.on('will-navigate', (event) => event.preventDefault());
   bar.webContents.on('did-finish-load', () => { sendMaximizeState(webUi, win.isMaximized()); });
-
   appView.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   appView.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(backendOrigin())) event.preventDefault();
@@ -245,8 +248,38 @@ function backendOrigin(): string {
   return backendUrl ? new URL(backendUrl).origin : '';
 }
 
+function applyLoginItem(enabled: boolean): void {
+  if (process.platform !== 'win32' || !app.isPackaged || process.windowsStore) return;
+  try {
+    app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath, args: [] });
+  } catch (error) {
+    console.error(t('loginItem.failed'), error);
+  }
+}
+
+async function backendVersion(): Promise<string> {
+  const installPath = app.isPackaged
+    ? path.resolve(process.env.OPENWEBUI_DESKTOP_PATH || path.dirname(app.getPath('exe')))
+    : app.getAppPath();
+  const resourceRoot = app.isPackaged ? path.join(installPath, 'resources') : installPath;
+  try {
+    const raw = await readFile(path.join(resourceRoot, 'backend', 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    return typeof parsed.version === 'string' ? parsed.version : '';
+  } catch {
+    return '';
+  }
+}
+
+async function relaunchApplication(): Promise<void> {
+  quitting = true;
+  await backend.stop();
+  app.relaunch();
+  app.exit(0);
+}
+
 async function openWebUI(): Promise<void> {
-  if (!backendUrl) throw new Error('O servidor ainda nÃ£o estÃ¡ pronto.');
+  if (!backendUrl) throw new Error(t('backend.notReady'));
   const existing = webUIShell;
   if (existing && !existing.win.isDestroyed()) {
     if (existing.app.webContents.getURL() !== backendUrl) await existing.app.webContents.loadURL(backendUrl);
@@ -266,7 +299,7 @@ async function openWebUI(): Promise<void> {
     if (!shell.bar.webContents.isDestroyed()) shell.bar.webContents.close();
     if (!shell.app.webContents.isDestroyed()) shell.app.webContents.close();
     if (!shell.win.isDestroyed()) shell.win.destroy();
-    throw new Error(`NÃ£o foi possÃ­vel abrir a interface do Open Web UI em ${backendUrl}. ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(t('webui.openFailed', { url: backendUrl, reason: error instanceof Error ? error.message : String(error) }));
   }
   updateTrayState();
   shell.win.show();
@@ -290,22 +323,22 @@ function updateTrayState(): void {
     if (item) item.enabled = !busy;
   }
   const openItem = trayMenu.getMenuItemById('tray-open');
-  if (openItem) openItem.label = webUIShell && !webUIShell.win.isDestroyed() ? 'Focar Open Web UI' : 'Abrir Open Web UI';
+  if (openItem) openItem.label = webUIShell && !webUIShell.win.isDestroyed() ? t('tray.focus') : t('tray.open');
 }
 
 function createTray(): void {
   tray = new Tray(createTrayIcon());
-  tray.setToolTip('Open Web UI Desktop');
+  tray.setToolTip(t('tray.tooltip'));
   const menu = Menu.buildFromTemplate([
-    { label: 'Abrir Open Web UI', id: 'tray-open', click: () => { void openWebUI().catch(reportActionError); } },
-    { label: 'Mostrar janela', id: 'tray-show', click: openWindow },
+    { label: t('tray.open'), id: 'tray-open', click: () => { void openWebUI().catch(reportActionError); } },
+    { label: t('tray.show'), id: 'tray-show', click: openWindow },
     { type: 'separator' },
-    { label: 'Reiniciar', id: 'tray-restart', click: () => { void restart().catch(reportActionError); } },
-    { label: 'Procurar AtualizaÃ§Ãµes', id: 'tray-updates', click: () => { openWindow(); window?.webContents.send('update:request'); } },
-    { label: 'ConfiguraÃ§Ãµes', id: 'tray-settings', click: () => { openWindow(); window?.webContents.send('settings:request'); } },
-    { label: 'Ajuda', id: 'tray-help', click: () => { openWindow(); window?.webContents.send('help:request'); } },
+    { label: t('tray.restart'), id: 'tray-restart', click: () => { void restart().catch(reportActionError); } },
+    { label: t('tray.updates'), id: 'tray-updates', click: () => { openWindow(); window?.webContents.send('update:request'); } },
+    { label: t('tray.settings'), id: 'tray-settings', click: () => { openWindow(); window?.webContents.send('settings:request'); } },
+    { label: t('tray.help'), id: 'tray-help', click: () => { openWindow(); window?.webContents.send('help:request'); } },
     { type: 'separator' },
-    { label: 'Sair', id: 'tray-quit', click: () => { void quitSafely(); } }
+    { label: t('tray.quit'), id: 'tray-quit', click: () => { void quitSafely(); } }
   ]);
   trayMenu = menu;
   tray.setContextMenu(menu);
@@ -315,13 +348,14 @@ function createTray(): void {
 }
 
 async function restart(): Promise<void> {
-  if (updater.isRunning) throw new Error('Aguarde a atualizaÃ§Ã£o em andamento terminar antes de reiniciar.');
-  if (restarting) throw new Error('O servidor jÃ¡ estÃ¡ sendo reiniciado.');
+  if (updater.isRunning) throw new Error(t('restart.updateRunning'));
+  if (restarting) throw new Error(t('restart.alreadyRunning'));
   restarting = true;
   updateTrayState();
   window?.webContents.send('backend:restarting', true);
   try {
     await backend.stop();
+    await environment.applyPendingConfigReset();
     const config = await store.load();
     backendUrl = await backend.start(config.environment, config.backendPort);
     if (!window || window.isDestroyed()) window = createWindow();
@@ -342,12 +376,12 @@ async function quitSafely(): Promise<void> {
   if (updater.isRunning) {
     const result = await dialog.showMessageBox({
       type: 'warning',
-      buttons: ['Sair e marcar atualizaÃ§Ã£o incompleta', 'Cancelar'],
+      buttons: [t('quit.confirm'), t('quit.cancel')],
       defaultId: 1,
       cancelId: 1,
-      title: 'AtualizaÃ§Ã£o em andamento',
-      message: 'Sair agora pode deixar os arquivos do servidor inconsistentes.',
-      detail: 'Se continuar, serÃ¡ solicitada uma atualizaÃ§Ã£o limpa na prÃ³xima inicializaÃ§Ã£o.'
+      title: t('quit.title'),
+      message: t('quit.message'),
+      detail: t('quit.detail')
     });
     if (result.response !== 0) return;
     await updater.markCorruptedAndExit();
@@ -359,48 +393,95 @@ async function quitSafely(): Promise<void> {
 }
 
 function registerHandlers(): void {
-  ipcMain.handle('config:get', async (event) => {
-    if (!isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
-    const config = await store.load();
-    const visibleEnvironment = config.environment.OPENROUTER_API_KEY ? { OPENROUTER_API_KEY: '' } : {};
-    return { ...config, environment: visibleEnvironment };
+  const untrusted = (): Error => new Error(t('untrusted'));
+  ipcMain.handle('config:get', async (event): Promise<DesktopConfigPayload> => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    const { environment: _environment, ...config } = await store.load();
+    return { ...config, resolvedLanguage: resolveLanguage(config.language) };
   });
-  ipcMain.handle('config:save', async (event, input: DesktopConfig) => {
-    if (!isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
-    if (!input || typeof input !== 'object' || typeof input.environment !== 'object' || input.environment === null || !Number.isInteger(input.backendPort) || input.backendPort < 1 || input.backendPort > 65535) throw new Error('ConfiguraÃ§Ã£o invÃ¡lida.');
-    if (Object.keys(input.environment).some((key) => key !== 'OPENROUTER_API_KEY')) throw new Error('Somente o provedor OpenRouter pode ser configurado na interface.');
-    const existing = (await store.load()).environment;
-    const environment = {
-      WEBUI_SECRET_KEY: existing.WEBUI_SECRET_KEY,
-      WEBUI_JWT_SECRET_KEY: existing.WEBUI_JWT_SECRET_KEY,
-      ...Object.fromEntries(Object.entries(input.environment)
-        .filter(([key, value]) => key === 'OPENROUTER_API_KEY' && typeof value === 'string')
-        .map(([key, value]) => [key, value || existing[key] || '']))
-    };
-    validateSecretEnvironment(environment);
-    const config = { windowMaximized: Boolean(input.windowMaximized), hideDesktopOnOpen: input.hideDesktopOnOpen !== false, backendPort: input.backendPort, environment };
-    await store.save(config);
+  ipcMain.handle('config:save', async (event, input: PublicDesktopConfig) => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    if (!input || typeof input !== 'object' || !Number.isInteger(input.backendPort) || input.backendPort < 1 || input.backendPort > 65535) throw new Error(t('config.invalid'));
+    const existing = await store.load();
+    await store.save({
+      windowMaximized: Boolean(input.windowMaximized),
+      hideDesktopOnOpen: input.hideDesktopOnOpen !== false,
+      launchAtLogin: Boolean(input.launchAtLogin),
+      backendPort: input.backendPort,
+      language: normalizeLanguagePreference(input.language),
+      environment: existing.environment
+    });
+    applyLoginItem(Boolean(input.launchAtLogin));
     await restart();
   });
   ipcMain.handle('config:hide-desktop-on-open', async (event, value: boolean) => {
-    if (!isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
-    if (typeof value !== 'boolean') throw new Error('Valor invÃ¡lido para a preferÃªncia da janela.');
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    if (typeof value !== 'boolean') throw new Error(t('config.invalidWindowPreference'));
     const config = await store.load();
     await store.save({ ...config, hideDesktopOnOpen: value });
     return value;
   });
+  ipcMain.handle('config:launch-at-login', async (event, value: boolean) => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    if (typeof value !== 'boolean') throw new Error(t('config.invalidLoginPreference'));
+    const config = await store.load();
+    await store.save({ ...config, launchAtLogin: value });
+    applyLoginItem(value);
+    return value;
+  });
+  ipcMain.handle('config:language', async (event, value: unknown) => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    const preference = normalizeLanguagePreference(value);
+    if (value !== 'auto' && !SUPPORTED_LANGUAGES.includes(preference as Language)) throw new Error(t('config.invalidLanguage'));
+    const config = await store.load();
+    await store.save({ ...config, language: preference });
+    setTimeout(() => { void relaunchApplication(); }, 150);
+    return preference;
+  });
+  ipcMain.handle('env:get', async (event) => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    return environment.read();
+  });
+  ipcMain.handle('env:save', async (event, entries: unknown) => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    return environment.saveEntries(entries);
+  });
+  ipcMain.handle('env:save-raw', async (event, raw: unknown) => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    return environment.saveRaw(raw);
+  });
+  ipcMain.handle('env:reset', async (event) => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    return environment.resetToExample();
+  });
+  ipcMain.handle('app:language-info', () => ({
+    language: resolveLanguage('auto'),
+    label: LANGUAGE_LABELS[resolveLanguage('auto')]
+  }));
+  ipcMain.handle('backend:version', async (event) => {
+    if (!isTrustedUi(event.sender)) throw untrusted();
+    return backendVersion();
+  });
+  ipcMain.handle('webui-window:locale', () => ({
+    serverName: t('webui.serverName'),
+    serverActive: t('webui.serverActive'),
+    minimize: t('webui.minimize'),
+    maximize: t('webui.maximize'),
+    restore: t('webui.restore'),
+    close: t('webui.close')
+  }));
   ipcMain.handle('backend:url', (event) => {
-    if (!isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
+    if (!isTrustedUi(event.sender)) throw untrusted();
     return backendUrl;
   });
   ipcMain.handle('backend:open-ui', async (event) => {
-    if (!isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
+    if (!isTrustedUi(event.sender)) throw untrusted();
     await openWebUI();
   });
   const authorizeWebUi = (event: Electron.IpcMainInvokeEvent): BrowserWindow => {
     const shell = webUIShell;
     if (!shell || shell.win.isDestroyed() || event.sender !== shell.bar.webContents) {
-      throw new Error('Janela nÃ£o autorizada.');
+      throw untrusted();
     }
     return shell.win;
   };
@@ -418,7 +499,7 @@ function registerHandlers(): void {
   ipcMain.handle('webui-window:close', (event) => { authorizeWebUi(event).close(); });
   const authorizeWindow = (event: Electron.IpcMainInvokeEvent): BrowserWindow => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || !isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
+    if (!win || !isTrustedUi(event.sender)) throw untrusted();
     return win;
   };
   ipcMain.handle('window:state', (event) => {
@@ -442,11 +523,11 @@ function registerHandlers(): void {
     return { hidden: true };
   });
   ipcMain.handle('app:restart', async (event) => {
-    if (!isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
+    if (!isTrustedUi(event.sender)) throw untrusted();
     await restart();
   });
   ipcMain.handle('update:pending', async (event) => {
-    if (!isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
+    if (!isTrustedUi(event.sender)) throw untrusted();
     window?.webContents.send('update:state', true);
     updateTrayState();
     try { return await updater.pendingCommits(); }
@@ -456,7 +537,7 @@ function registerHandlers(): void {
     }
   });
   ipcMain.handle('update:apply', async (event) => {
-    if (!isTrustedUi(event.sender)) throw new Error('Janela nÃ£o autorizada.');
+    if (!isTrustedUi(event.sender)) throw untrusted();
     window?.webContents.send('update:state', true);
     updateTrayState();
     try {
@@ -495,14 +576,16 @@ void app.whenReady().then(async () => {
   if (!(app.isPackaged && process.windowsStore) && !await ensureAdministrator()) return;
   if (!app.isReady()) return;
   if (process.platform !== 'win32') {
-    await dialog.showMessageBox({ type: 'error', title: 'Open Web UI Desktop', message: 'Este aplicativo requer Windows 10/11 x64.' });
+    await dialog.showMessageBox({ type: 'error', title: 'Open Web UI Desktop', message: t('platform.unsupported') });
     app.quit();
     return;
   }
   try {
+    const config = await store.load();
+    setLanguage(resolveLanguage(config.language));
     await updater.recoverIfCorrupted();
     registerHandlers();
-    const config = await store.load();
+    await environment.ensureInitialized();
     if (!config.environment.WEBUI_SECRET_KEY) {
       config.environment.WEBUI_SECRET_KEY = randomBytes(32).toString('hex');
       config.environment.WEBUI_JWT_SECRET_KEY = randomBytes(32).toString('hex');
@@ -511,11 +594,12 @@ void app.whenReady().then(async () => {
     backendUrl = await backend.start(config.environment, config.backendPort);
     window = createWindow(config.windowMaximized);
     createTray();
+    applyLoginItem(config.launchAtLogin);
   } catch (error) {
     await dialog.showMessageBox({
-      type: 'error', title: 'NÃ£o foi possÃ­vel iniciar o servidor',
+      type: 'error', title: t('startup.title'),
       message: error instanceof Error ? error.message : String(error),
-      detail: `Verifique se o Python embeddable e as dependÃªncias estÃ£o em lib. Autor: ${AUTHOR}`
+      detail: t('startup.detail', { author: AUTHOR })
     });
     quitting = true;
     await backend.stop();

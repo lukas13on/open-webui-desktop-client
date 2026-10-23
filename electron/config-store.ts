@@ -2,15 +2,32 @@ import { app, safeStorage } from 'electron';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { sanitizeSecretEnvironment, validateSecretEnvironment } from './secrets';
+import { normalizeLanguagePreference, type Language, type LanguagePreference } from './languages';
+
+export { SUPPORTED_LANGUAGES, LANGUAGE_LABELS, normalizeLanguagePreference } from './languages';
+export type { Language, LanguagePreference } from './languages';
 
 export type DesktopConfig = {
   windowMaximized: boolean;
   hideDesktopOnOpen: boolean;
+  launchAtLogin: boolean;
   backendPort: number;
+  language: LanguagePreference;
   environment: Record<string, string>;
 };
 
-const defaults: DesktopConfig = { windowMaximized: false, hideDesktopOnOpen: true, backendPort: 3301, environment: {} };
+export type PublicDesktopConfig = Omit<DesktopConfig, 'environment'>;
+
+export type DesktopConfigPayload = PublicDesktopConfig & { resolvedLanguage: Language };
+
+const defaults: DesktopConfig = {
+  windowMaximized: false,
+  hideDesktopOnOpen: true,
+  launchAtLogin: false,
+  backendPort: 3301,
+  language: 'auto',
+  environment: {}
+};
 export class ConfigStore {
   private static instance: ConfigStore;
   private constructor() {}
@@ -41,7 +58,9 @@ export class ConfigStore {
       ...config,
       backendPort: Number.isInteger(config.backendPort) && Number(config.backendPort) >= 1 && Number(config.backendPort) <= 65535 ? Number(config.backendPort) : defaults.backendPort,
       windowMaximized: typeof config.windowMaximized === 'boolean' ? config.windowMaximized : defaults.windowMaximized,
-      hideDesktopOnOpen: typeof config.hideDesktopOnOpen === 'boolean' ? config.hideDesktopOnOpen : defaults.hideDesktopOnOpen
+      hideDesktopOnOpen: typeof config.hideDesktopOnOpen === 'boolean' ? config.hideDesktopOnOpen : defaults.hideDesktopOnOpen,
+      launchAtLogin: typeof config.launchAtLogin === 'boolean' ? config.launchAtLogin : defaults.launchAtLogin,
+      language: normalizeLanguagePreference(config.language)
     };
 
     let environment: Record<string, string> = {};
@@ -53,10 +72,17 @@ export class ConfigStore {
     return { ...defaults, ...config, environment };
   }
 
-  async save(config: DesktopConfig): Promise<void> {
+  async save(config: DesktopConfig | PublicDesktopConfig): Promise<void> {
     await mkdir(this.directory, { recursive: true });
-    validateSecretEnvironment(config.environment);
-    const { environment, ...publicConfig } = config;
+    const environment = 'environment' in config ? config.environment : (await this.load()).environment;
+    validateSecretEnvironment(environment);
+    const publicConfig: PublicDesktopConfig = {
+      windowMaximized: config.windowMaximized,
+      hideDesktopOnOpen: config.hideDesktopOnOpen,
+      launchAtLogin: config.launchAtLogin,
+      backendPort: config.backendPort,
+      language: normalizeLanguagePreference(config.language)
+    };
     if (!safeStorage.isEncryptionAvailable() && Object.keys(environment).length) {
       throw new Error('O cofre DPAPI não está disponível; as variáveis secretas não foram salvas.');
     }

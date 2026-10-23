@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { access, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { BackendManager } from './backend-manager';
+import { t } from './i18n';
 
 export type PendingCommit = { hash: string; subject: string };
 
@@ -14,7 +15,7 @@ function git(cwd: string, args: string[]): Promise<string> {
     child.stdout?.setEncoding('utf8').on('data', (chunk: string) => { stdout += chunk; });
     child.stderr?.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk; });
     child.once('error', reject);
-    child.once('exit', (code) => code === 0 ? resolve(stdout.trim()) : reject(new Error(stderr.trim() || `Git terminou com código ${code}.`)));
+    child.once('exit', (code) => code === 0 ? resolve(stdout.trim()) : reject(new Error(stderr.trim() || t('git.exitCode', { code: code ?? 0 }))));
   });
 }
 
@@ -50,23 +51,26 @@ export class UpdateManager {
   }
 
   async update(confirmed = false): Promise<{ commits: PendingCommit[]; updated: boolean }> {
-    if (this.running) throw new Error('A atualização já está em andamento.');
+    if (this.running) throw new Error(t('update.alreadyRunning'));
     this.running = true;
     try {
       const commits = await this.pendingCommits();
       if (!commits.length) return { commits, updated: false };
       if (!confirmed) return { commits, updated: false };
+      const detail = commits.slice(0, 25).map(({ hash, subject }) => `${hash} ${subject}`).join('\n');
       const result = await dialog.showMessageBox({
         type: 'warning',
-        buttons: ['Atualizar servidor', 'Cancelar'],
+        buttons: [t('update.confirmButton'), t('update.cancelButton')],
         defaultId: 1,
         cancelId: 1,
-        title: 'Confirmar atualização',
-        message: `${commits.length} commit(s) do servidor serão instalados.`,
-        detail: commits.slice(0, 25).map(({ hash, subject }) => `${hash} ${subject}`).join('\n') + (commits.length > 25 ? `\n… e mais ${commits.length - 25}` : '')
+        title: t('update.confirmTitle'),
+        message: t('update.confirmMessage', { count: commits.length }),
+        detail: commits.length > 25
+          ? t('update.confirmDetail', { commits: detail, remaining: commits.length - 25 })
+          : detail
       });
       if (result.response !== 0) return { commits, updated: false };
-      if (this.isStorePackage) throw new Error('A Microsoft Store não permite substituir código empacotado durante a execução. Atualize o aplicativo pela Store.');
+      if (this.isStorePackage) throw new Error(t('update.storeBlocked'));
       await BackendManager.getInstance().stop();
       await git(this.backendPath, ['fetch', '--depth', '1', 'origin', 'main', '--quiet']);
       await git(this.backendPath, ['reset', '--hard', 'origin/main']);
@@ -88,25 +92,25 @@ export class UpdateManager {
     try { await access(marker); } catch { return false; }
     if (this.isStorePackage) {
       const recoveryChoice = await dialog.showMessageBox({
-        type: 'warning', buttons: ['Sair', 'Continuar sem atualizar'], defaultId: 0, cancelId: 0,
-        title: 'Atualização interrompida',
-        message: 'A Microsoft Store não permite reparar os arquivos empacotados no local.',
-        detail: 'Reinstale uma versão atualizada do aplicativo Desktop para restaurar o servidor.'
+        type: 'warning', buttons: [t('update.cancelExit'), t('update.continueWithoutUpdating')], defaultId: 0, cancelId: 0,
+        title: t('update.interruptedTitle'),
+        message: t('update.storeRepairMessage'),
+        detail: t('update.storeRepairDetail')
       });
       await rm(marker, { force: true });
-      if (recoveryChoice.response === 0) throw new Error('Reinicie o aplicativo pela Microsoft Store após instalar uma versão atualizada.');
+      if (recoveryChoice.response === 0) throw new Error(t('update.storeExit'));
       return false;
     }
     const result = await dialog.showMessageBox({
       type: 'warning',
-      buttons: ['Atualização limpa', 'Sair'],
+      buttons: [t('update.interruptedClean'), t('update.cancelExit')],
       defaultId: 0,
       cancelId: 1,
-      title: 'Atualização interrompida',
-      message: 'Uma atualização foi interrompida e os arquivos podem estar inconsistentes.',
-      detail: 'A atualização limpa remove e clona novamente a pasta backend. Faça backup dos dados personalizados antes de continuar.'
+      title: t('update.interruptedTitle'),
+      message: t('update.interruptedMessage'),
+      detail: t('update.interruptedDetail')
     });
-    if (result.response !== 0) throw new Error('A recuperação foi cancelada. O backend não será iniciado até reparar a instalação.');
+    if (result.response !== 0) throw new Error(t('update.recoveryCancelled'));
     const backendPath = this.backendPath;
     await rm(backendPath, { recursive: true, force: true });
     try {

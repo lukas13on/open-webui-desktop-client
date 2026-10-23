@@ -2,6 +2,7 @@ import { app, dialog } from 'electron';
 import { execFileSync } from 'node:child_process';
 import { platform } from 'node:os';
 import { promisify } from 'node:util';
+import { t } from './i18n';
 
 export async function ensureAdministrator(): Promise<boolean> {
   if (platform() !== 'win32') return true;
@@ -11,7 +12,7 @@ export async function ensureAdministrator(): Promise<boolean> {
     await dialog.showMessageBox({
       type: 'warning',
       title: 'Open Web UI Desktop',
-      message: 'Execute o Open Web UI Desktop como administrador para continuar.'
+      message: t('admin.required')
     });
     app.exit(1);
     return false;
